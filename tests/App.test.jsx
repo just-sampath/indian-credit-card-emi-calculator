@@ -5,9 +5,7 @@ describe("App", () => {
   it("renders the calculator heading, controls, and default tab", () => {
     render(<App />);
 
-    expect(
-      screen.getByText("Credit Card EMI Calculator")
-    ).toBeInTheDocument();
+    expect(screen.getByText("Credit Card EMI Calculator")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Amortization Schedule" })
     ).toBeInTheDocument();
@@ -28,6 +26,9 @@ describe("App", () => {
     expect(
       screen.getByText(/TOTAL COST IF YOU PRE-CLOSE AT MONTH/i)
     ).toBeInTheDocument();
+    expect(
+      screen.getAllByText(/Accrued\/advance interest/i).length
+    ).toBeGreaterThan(0);
   });
 
   it("renders the summary sections and comparison table", () => {
@@ -38,5 +39,8 @@ describe("App", () => {
     expect(screen.getByText("Loan Structure")).toBeInTheDocument();
     expect(screen.getByText("Total Cost Breakdown")).toBeInTheDocument();
     expect(screen.getByText(/No Cost EMI vs Regular EMI/i)).toBeInTheDocument();
+    expect(
+      screen.getAllByText(/GST on processing fee/i).length
+    ).toBeGreaterThan(0);
   });
 });

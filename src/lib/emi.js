@@ -1,6 +1,27 @@
 export const GST_RATE = 0.18;
 export const PRECLOSURE_FEE = 0.03;
 
+export function roundMoney(value) {
+  return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+}
+
+function sumMoney(values) {
+  return values.reduce((total, value) => roundMoney(total + value), 0);
+}
+
+function buildBasePayments(totalBasePayment, months) {
+  const roundedTotal = roundMoney(totalBasePayment);
+  const standardPayment = roundMoney(roundedTotal / months);
+
+  return Array.from({ length: months }, (_, index) => {
+    if (index === months - 1) {
+      return roundMoney(roundedTotal - standardPayment * (months - 1));
+    }
+
+    return standardPayment;
+  });
+}
+
 export function calcEMI(principal, monthlyRate, months) {
   if (monthlyRate === 0) {
     return principal / months;
@@ -23,24 +44,60 @@ export function calcPV(monthlyRate, months, payment) {
   return (payment * (1 - Math.pow(1 + r, -n))) / r;
 }
 
+export function calcPVFromPayments(monthlyRate, payments) {
+  if (monthlyRate === 0) {
+    return sumMoney(payments);
+  }
+
+  return payments.reduce(
+    (total, payment, index) =>
+      total + payment / Math.pow(1 + monthlyRate, index + 1),
+    0
+  );
+}
+
 export function buildSchedule(principal, monthlyRate, baseEMI, months) {
   const rows = [];
-  let balance = principal;
+  let balance = roundMoney(principal);
+  const basePayments = Array.isArray(baseEMI)
+    ? baseEMI.map((payment) => roundMoney(payment))
+    : Array.from({ length: months }, () => roundMoney(baseEMI));
+  const hasExplicitPayments = Array.isArray(baseEMI);
 
   for (let month = 1; month <= months; month += 1) {
-    const interest = balance * monthlyRate;
-    const principalPaid = baseEMI - interest;
-    const gst = interest * GST_RATE;
-    const totalPaid = baseEMI + gst;
-    const closingBalance = Math.max(0, balance - principalPaid);
+    const isLastMonth = month === months;
+    const openingBalance = roundMoney(balance);
+    const rawInterest = openingBalance * monthlyRate;
+    let interest = roundMoney(rawInterest);
+    let payment = basePayments[month - 1];
+    let principalPaid;
+    let closingBalance;
+
+    if (isLastMonth) {
+      principalPaid = openingBalance;
+
+      if (hasExplicitPayments) {
+        interest = roundMoney(payment - principalPaid);
+      } else {
+        payment = roundMoney(principalPaid + interest);
+      }
+
+      closingBalance = 0;
+    } else {
+      principalPaid = roundMoney(payment - interest);
+      closingBalance = roundMoney(Math.max(0, openingBalance - principalPaid));
+    }
+
+    const gst = roundMoney(Math.max(0, rawInterest) * GST_RATE);
+    const totalPaid = roundMoney(payment + gst);
 
     rows.push({
       month,
-      openingBalance: balance,
+      openingBalance,
       interest,
       principalPaid,
       gst,
-      baseEMI,
+      baseEMI: payment,
       totalPaid,
       closingBalance,
     });
@@ -48,17 +105,63 @@ export function buildSchedule(principal, monthlyRate, baseEMI, months) {
     balance = closingBalance;
   }
 
-  if (rows.length > 0) {
-    const lastRow = rows.at(-1);
-
-    lastRow.closingBalance = 0;
-    lastRow.principalPaid = lastRow.openingBalance;
-    lastRow.interest = lastRow.baseEMI - lastRow.principalPaid;
-    lastRow.gst = Math.max(0, lastRow.interest) * GST_RATE;
-    lastRow.totalPaid = lastRow.baseEMI + lastRow.gst;
-  }
-
   return rows;
+}
+
+function buildPreclosureRow({
+  row,
+  index,
+  schedule,
+  processingFeeTotal,
+  monthlyRate,
+  preclosureFeeRate,
+  preclosureInterestMonths,
+  merchantClawback,
+  isNoCost,
+  mrp,
+}) {
+  const paidSoFar = sumMoney(
+    schedule.slice(0, index + 1).map((current) => current.totalPaid)
+  );
+  const outstandingPrincipal = row.closingBalance;
+  const hasOutstanding = outstandingPrincipal > 0;
+  const preclosureFee = hasOutstanding
+    ? roundMoney(outstandingPrincipal * preclosureFeeRate)
+    : 0;
+  const preclosureFeeGst = hasOutstanding
+    ? roundMoney(preclosureFee * GST_RATE)
+    : 0;
+  const preclosureInterest = hasOutstanding
+    ? roundMoney(outstandingPrincipal * monthlyRate * preclosureInterestMonths)
+    : 0;
+  const preclosureInterestGst = hasOutstanding
+    ? roundMoney(preclosureInterest * GST_RATE)
+    : 0;
+  const effectiveMerchantClawback =
+    hasOutstanding && isNoCost ? roundMoney(merchantClawback) : 0;
+  const totalCost = roundMoney(
+    paidSoFar +
+      outstandingPrincipal +
+      preclosureFee +
+      preclosureFeeGst +
+      preclosureInterest +
+      preclosureInterestGst +
+      processingFeeTotal +
+      effectiveMerchantClawback
+  );
+
+  return {
+    month: row.month,
+    paidSoFar,
+    outstandingPrincipal,
+    preclosureFee,
+    preclosureFeeGst,
+    preclosureInterest,
+    preclosureInterestGst,
+    merchantClawback: effectiveMerchantClawback,
+    totalCost,
+    deltaVsMRP: roundMoney(totalCost - mrp),
+  };
 }
 
 export function calculateEmiScenario({
@@ -66,45 +169,61 @@ export function calculateEmiScenario({
   annualRate,
   tenure,
   isNoCost,
-  procFee,
-  preclosureMonth,
+  procFee = 0,
+  preclosureMonth = 1,
+  preclosureFeeRate = PRECLOSURE_FEE,
+  preclosureInterestMonths = 1,
+  merchantClawback = 0,
 }) {
-  const monthlyRate = annualRate / 1200;
-  const months = tenure;
+  const amount = roundMoney(Math.max(0, Number(mrp) || 0));
+  const monthlyRate = (Number(annualRate) || 0) / 1200;
+  const months = Math.max(1, Math.trunc(Number(tenure) || 1));
+  const processingFee = roundMoney(Math.max(0, Number(procFee) || 0));
+  const processingFeeGst = roundMoney(processingFee * GST_RATE);
+  const processingFeeTotal = roundMoney(processingFee + processingFeeGst);
 
   let principal;
   let baseEMI;
   let discount;
+  let basePayments;
 
   if (isNoCost) {
-    const emiTarget = mrp / months;
+    basePayments = buildBasePayments(amount, months);
 
-    principal = calcPV(monthlyRate, months, emiTarget);
-    discount = mrp - principal;
-    baseEMI = mrp / months;
+    principal = roundMoney(calcPVFromPayments(monthlyRate, basePayments));
+    discount = roundMoney(amount - principal);
+    baseEMI = basePayments[0];
   } else {
-    principal = mrp;
+    principal = amount;
     discount = 0;
-    baseEMI = calcEMI(principal, monthlyRate, months);
+    baseEMI = roundMoney(calcEMI(principal, monthlyRate, months));
+    basePayments = baseEMI;
   }
 
-  const schedule = buildSchedule(principal, monthlyRate, baseEMI, months);
-  const totalInterest = schedule.reduce(
-    (total, row) => total + row.interest,
-    0
+  const schedule = buildSchedule(principal, monthlyRate, basePayments, months);
+  const totalInterest = sumMoney(schedule.map((row) => row.interest));
+  const totalGST = sumMoney(schedule.map((row) => row.gst));
+  const totalPaid = sumMoney(schedule.map((row) => row.totalPaid));
+  const grandTotal = roundMoney(totalPaid + processingFeeTotal);
+  const extraCostAboveMRP = roundMoney(grandTotal - amount);
+  const clampedPreclosureMonth = Math.min(Math.max(1, preclosureMonth), months);
+  const preclosureRows = schedule.map((row, index) =>
+    buildPreclosureRow({
+      row,
+      index,
+      schedule,
+      processingFeeTotal,
+      monthlyRate,
+      preclosureFeeRate,
+      preclosureInterestMonths: Math.max(0, preclosureInterestMonths),
+      merchantClawback,
+      isNoCost,
+      mrp: amount,
+    })
   );
-  const totalGST = schedule.reduce((total, row) => total + row.gst, 0);
-  const totalPaid = schedule.reduce((total, row) => total + row.totalPaid, 0);
-  const clampedPreclosureMonth = Math.min(preclosureMonth, months);
-  const paidRows = schedule.slice(0, clampedPreclosureMonth);
-  const paidSoFar = paidRows.reduce((total, row) => total + row.totalPaid, 0);
-  const outstandingPrincipal =
-    clampedPreclosureMonth < months
-      ? schedule[clampedPreclosureMonth - 1].closingBalance
-      : 0;
-  const pcFee = outstandingPrincipal * PRECLOSURE_FEE;
-  const pcTotalCost = paidSoFar + outstandingPrincipal + pcFee + procFee;
-  const pcSavingVsFullTenure = totalPaid + procFee - pcTotalCost;
+  const preclosure = preclosureRows[clampedPreclosureMonth - 1];
+
+  preclosure.savingVsFullTenure = roundMoney(grandTotal - preclosure.totalCost);
 
   return {
     monthlyRate,
@@ -116,13 +235,14 @@ export function calculateEmiScenario({
     totalInterest,
     totalGST,
     totalPaid,
-    grandTotal: totalPaid + procFee,
-    extraCostAboveMRP: totalPaid + procFee - mrp,
-    pcMonth: clampedPreclosureMonth,
-    paidSoFar,
-    outstandingPrincipal,
-    pcFee,
-    pcTotalCost,
-    pcSavingVsFullTenure,
+    processingFee,
+    processingFeeGst,
+    processingFeeTotal,
+    grandTotal,
+    extraCostAboveMRP,
+    preclosureFeeRate,
+    preclosureInterestMonths: Math.max(0, preclosureInterestMonths),
+    preclosureRows,
+    preclosure,
   };
 }

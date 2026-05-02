@@ -1,4 +1,4 @@
-import { calcEMI, calcPV, buildSchedule } from "../../lib/emi.js";
+import { calculateEmiScenario } from "../../lib/emi.js";
 import { Card } from "../ui/Card.jsx";
 import { formatCurrency } from "../../lib/format.js";
 
@@ -10,40 +10,38 @@ export function SummaryTab({
   procFee,
   tenure,
 }) {
-  const monthlyRate = annualRate / 1200;
-  const noCostEmi = mrp / tenure;
-  const noCostPrincipal = calcPV(monthlyRate, tenure, noCostEmi);
-  const noCostSchedule = buildSchedule(
-    noCostPrincipal,
-    monthlyRate,
-    noCostEmi,
-    tenure
-  );
-  const noCostInterest = noCostSchedule.reduce(
-    (total, row) => total + row.interest,
-    0
-  );
-  const noCostGst = noCostSchedule.reduce((total, row) => total + row.gst, 0);
-  const noCostTotal =
-    noCostSchedule.reduce((total, row) => total + row.totalPaid, 0) + procFee;
-  const regularEmi = calcEMI(mrp, monthlyRate, tenure);
-  const regularSchedule = buildSchedule(mrp, monthlyRate, regularEmi, tenure);
-  const regularInterest = regularSchedule.reduce(
-    (total, row) => total + row.interest,
-    0
-  );
-  const regularGst = regularSchedule.reduce((total, row) => total + row.gst, 0);
-  const regularTotal =
-    regularSchedule.reduce((total, row) => total + row.totalPaid, 0) + procFee;
+  const noCostCalc = calculateEmiScenario({
+    mrp,
+    annualRate,
+    tenure,
+    isNoCost: true,
+    procFee,
+  });
+  const regularCalc = calculateEmiScenario({
+    mrp,
+    annualRate,
+    tenure,
+    isNoCost: false,
+    procFee,
+  });
 
   const comparisonRows = [
-    ["Principal on Card", noCostPrincipal, mrp],
-    ["Upfront Discount", mrp - noCostPrincipal, 0],
-    ["Base EMI (per month)", noCostEmi, regularEmi],
-    ["Total Interest", noCostInterest, regularInterest],
-    ["Total GST on Interest", noCostGst, regularGst],
-    ["Total Outflow (incl. proc fee)", noCostTotal, regularTotal],
-    ["Extra Above MRP", noCostTotal - mrp, regularTotal - mrp],
+    ["Principal on Card", noCostCalc.principal, regularCalc.principal],
+    ["Upfront Discount", noCostCalc.discount, regularCalc.discount],
+    ["Base EMI before GST", noCostCalc.baseEMI, regularCalc.baseEMI],
+    ["Total Interest", noCostCalc.totalInterest, regularCalc.totalInterest],
+    ["Total GST on Interest", noCostCalc.totalGST, regularCalc.totalGST],
+    [
+      "GST on Processing Fee",
+      noCostCalc.processingFeeGst,
+      regularCalc.processingFeeGst,
+    ],
+    ["Total Outflow", noCostCalc.grandTotal, regularCalc.grandTotal],
+    [
+      "Extra Above MRP",
+      noCostCalc.extraCostAboveMRP,
+      regularCalc.extraCostAboveMRP,
+    ],
   ];
 
   const loanStructureRows = [
@@ -61,7 +59,9 @@ export function SummaryTab({
           `${formatCurrency(mrp)}÷${tenure} = ${formatCurrency(mrp / tenure)} ✓`,
         ]
       : null,
-    ["Processing Fee", formatCurrency(procFee)],
+    ["Processing Fee", formatCurrency(calc.processingFee)],
+    ["GST on Processing Fee", formatCurrency(calc.processingFeeGst)],
+    ["Processing Fee Total", formatCurrency(calc.processingFeeTotal)],
   ].filter(Boolean);
 
   const totalCostRows = [
@@ -80,7 +80,16 @@ export function SummaryTab({
       formatCurrency(calc.totalGST),
       "text-[var(--color-red)]",
     ],
-    ["Processing Fee", formatCurrency(procFee), "text-[var(--color-text-dim)]"],
+    [
+      "Processing Fee",
+      formatCurrency(calc.processingFee),
+      "text-[var(--color-text-dim)]",
+    ],
+    [
+      "GST on Processing Fee",
+      formatCurrency(calc.processingFeeGst),
+      "text-[var(--color-red)]",
+    ],
     null,
     [
       "TOTAL OUTFLOW",
@@ -141,9 +150,7 @@ export function SummaryTab({
                   key={label}
                   className="flex justify-between border-b border-b-[#111827] pb-2 text-[12px]"
                 >
-                  <span className="text-text-muted">
-                    {label}
-                  </span>
+                  <span className="text-text-muted">{label}</span>
                   <span
                     className={`${
                       label.startsWith("TOTAL") ? "font-bold" : "font-medium"
@@ -175,15 +182,9 @@ export function SummaryTab({
             <tbody>
               {comparisonRows.map(([label, noCostValue, regularValue]) => (
                 <tr key={label}>
-                  <td className="text-left text-text-dim">
-                    {label}
-                  </td>
-                  <td className="text-green">
-                    {formatCurrency(noCostValue)}
-                  </td>
-                  <td className="text-gold">
-                    {formatCurrency(regularValue)}
-                  </td>
+                  <td className="text-left text-text-dim">{label}</td>
+                  <td className="text-green">{formatCurrency(noCostValue)}</td>
+                  <td className="text-gold">{formatCurrency(regularValue)}</td>
                   <td
                     className={
                       noCostValue < regularValue
@@ -213,32 +214,27 @@ export function SummaryTab({
         <strong className="mb-1.5 block text-gold">
           Key Mechanics (Indian Banks)
         </strong>
-        <strong className="text-text">
-          1. Reducing Balance:
-        </strong>{" "}
-        Interest is computed monthly on the diminishing outstanding principal —
-        not flat rate.
+        <strong className="text-text">1. Reducing Balance:</strong> Interest is
+        computed monthly on the diminishing outstanding principal — not flat
+        rate.
         <br />
-        <strong className="text-text">2. GST (18%):</strong>{" "}
-        Charged on the <em>interest component only</em>, billed in the next
-        month&apos;s statement per T&C.
+        <strong className="text-text">2. GST (18%):</strong> Charged on the{" "}
+        <em>interest component</em>, processing fee, and pre-closure charges
+        where applicable.
         <br />
-        <strong className="text-text">
-          3. No Cost EMI Discount:
-        </strong>{" "}
+        <strong className="text-text">3. No Cost EMI Discount:</strong>{" "}
         Merchant/brand gives an upfront discount = MRP − PV(r, n, MRP/n). Card
         is charged the discounted amount. Bank earns interest on discounted
-        principal. You pay MRP/n per month (+ GST on interest).
+        principal. You pay the base EMI before GST, then the statement debit
+        adds GST on interest.
         <br />
-        <strong className="text-text">
-          4. RBI Mandate (2013):
-        </strong>{" "}
-        Banks cannot offer zero-interest loans. Interest is always charged,
-        offset by merchant subsidy in No Cost EMI.
+        <strong className="text-text">4. RBI Mandate (2013):</strong> Banks
+        cannot offer zero-interest loans. Interest is always charged, offset by
+        merchant subsidy in No Cost EMI.
         <br />
-        <strong className="text-text">5. Pre-closure:</strong> 3%
-        of outstanding principal + any accrued interest. Merchant discount may
-        be clawed back within 120 days.
+        <strong className="text-text">5. Pre-closure:</strong> 3% of outstanding
+        principal + GST on the fee + accrued/advance interest + GST on that
+        interest. Any merchant clawback is configurable.
       </div>
     </div>
   );

@@ -20,6 +20,9 @@ export default function App() {
   const [isNoCost, setIsNoCost] = useState(true);
   const [procFee, setProcFee] = useState(199);
   const [preclosureMonth, setPreclosureMonth] = useState(3);
+  const [preclosureFeeRate, setPreclosureFeeRate] = useState(3);
+  const [preclosureInterestMonths, setPreclosureInterestMonths] = useState(1);
+  const [merchantClawback, setMerchantClawback] = useState(0);
   const [activeTab, setActiveTab] = useState("schedule");
 
   const calc = useMemo(
@@ -31,8 +34,21 @@ export default function App() {
         isNoCost,
         procFee,
         preclosureMonth,
+        preclosureFeeRate: preclosureFeeRate / 100,
+        preclosureInterestMonths,
+        merchantClawback,
       }),
-    [annualRate, isNoCost, mrp, preclosureMonth, procFee, tenure]
+    [
+      annualRate,
+      isNoCost,
+      merchantClawback,
+      mrp,
+      preclosureFeeRate,
+      preclosureInterestMonths,
+      preclosureMonth,
+      procFee,
+      tenure,
+    ]
   );
 
   let content = (
@@ -44,10 +60,14 @@ export default function App() {
       <PreclosureTab
         calc={calc}
         isNoCost={isNoCost}
-        mrp={mrp}
+        merchantClawback={merchantClawback}
+        onMerchantClawbackChange={setMerchantClawback}
+        onPreclosureFeeRateChange={setPreclosureFeeRate}
+        onPreclosureInterestMonthsChange={setPreclosureInterestMonths}
         onPreclosureMonthChange={setPreclosureMonth}
         preclosureMonth={preclosureMonth}
-        procFee={procFee}
+        preclosureFeeRate={preclosureFeeRate}
+        preclosureInterestMonths={preclosureInterestMonths}
         tenure={tenure}
       />
     );

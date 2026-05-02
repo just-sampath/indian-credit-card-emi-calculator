@@ -51,14 +51,12 @@ export function Sidebar({
         ) : null}
 
         <Card tone="gold">
-          <div className="mb-1 text-[10px] text-gold">
-            MONTHLY PAYMENT (Base EMI)
-          </div>
+          <div className="mb-1 text-[10px] text-gold">BASE EMI BEFORE GST</div>
           <div className="highlight-value text-[22px] text-gold-soft">
             {formatCurrency(calc.baseEMI)}
           </div>
           <div className="mt-1 text-[10px] text-text-muted">
-            + GST on interest (varies per month)
+            statement debit adds GST on interest
           </div>
         </Card>
 
@@ -80,6 +78,18 @@ export function Sidebar({
           </div>
         </Card>
 
+        <Card>
+          <div className="mb-1 text-[10px] text-text-dim">
+            GST ON PROCESSING FEE
+          </div>
+          <div className="highlight-value text-[16px] text-gold-soft">
+            {formatCurrency(calc.processingFeeGst)}
+          </div>
+          <div className="mt-1 text-[10px] text-text-muted">
+            fee total {formatCurrency(calc.processingFeeTotal)}
+          </div>
+        </Card>
+
         <Card tone="red">
           <div className="mb-1 text-[10px] text-red">
             TRUE EXTRA COST ABOVE MRP
@@ -88,7 +98,8 @@ export function Sidebar({
             {formatCurrency(calc.extraCostAboveMRP)}
           </div>
           <div className="mt-1 text-[10px] text-text-muted">
-            = GST on interest + proc fee{!isNoCost ? " + interest" : ""}
+            = GST on interest + processing fee total
+            {!isNoCost ? " + interest" : ""}
           </div>
         </Card>
       </div>

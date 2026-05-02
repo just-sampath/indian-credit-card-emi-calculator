@@ -6,9 +6,7 @@ export function ScheduleTab({ calc, isNoCost, mrp, tenure }) {
     <div>
       <div className="mb-4 flex flex-wrap gap-3">
         <Card className="flex-1">
-          <div className="text-[10px] text-text-muted">
-            PRINCIPAL AMORTIZED
-          </div>
+          <div className="text-[10px] text-text-muted">PRINCIPAL AMORTIZED</div>
           <div className="mt-1 display-font text-[16px] font-bold text-text">
             {formatCurrency(calc.principal)}
           </div>
@@ -22,7 +20,7 @@ export function ScheduleTab({ calc, isNoCost, mrp, tenure }) {
 
         <Card className="flex-1">
           <div className="text-[10px] text-text-muted">
-            BASE EMI × {tenure}
+            BASE EMI BEFORE GST × {tenure}
           </div>
           <div className="mt-1 display-font text-[16px] font-bold text-text">
             {formatCurrency(calc.baseEMI)} × {tenure}
@@ -36,13 +34,13 @@ export function ScheduleTab({ calc, isNoCost, mrp, tenure }) {
 
         <Card className="flex-1">
           <div className="text-[10px] text-text-muted">
-            TOTAL EMI OUTFLOW
+            EMI STATEMENT OUTFLOW
           </div>
           <div className="mt-1 display-font text-[16px] font-bold text-text">
             {formatCurrency(calc.totalPaid)}
           </div>
           <div className="mt-0.5 text-[10px] text-text-muted">
-            incl. GST on interest
+            incl. GST on interest, excl. processing fee
           </div>
         </Card>
       </div>
@@ -102,24 +100,18 @@ export function ScheduleTab({ calc, isNoCost, mrp, tenure }) {
                 <td className="text-text">
                   {formatCurrency(row.openingBalance)}
                 </td>
-                <td className="text-gold">
-                  {formatCurrency(row.interest)}
-                </td>
+                <td className="text-gold">{formatCurrency(row.interest)}</td>
                 <td className="text-blue">
                   {formatCurrency(row.principalPaid)}
                 </td>
-                <td className="text-red">
-                  {formatCurrency(row.gst)}
-                </td>
+                <td className="text-red">{formatCurrency(row.gst)}</td>
                 <td>{formatCurrency(row.baseEMI)}</td>
                 <td className="font-semibold text-green">
                   {formatCurrency(row.totalPaid)}
                 </td>
                 <td
                   className={
-                    row.closingBalance < 1
-                      ? "text-green"
-                      : "text-text"
+                    row.closingBalance < 1 ? "text-green" : "text-text"
                   }
                 >
                   {row.closingBalance < 1
@@ -155,21 +147,19 @@ export function ScheduleTab({ calc, isNoCost, mrp, tenure }) {
       </div>
 
       <div className="mt-4 rounded-lg border border-border bg-surface px-4 py-3 text-[11px] leading-[1.7] text-[#475569]">
-        <strong className="text-gold">How it works:</strong> Each
-        month, Interest = Opening Balance × (Annual Rate ÷ 1200). Principal Paid
-        = Base EMI − Interest. GST (18%) is charged on the monthly interest
-        component and billed separately. Opening balance for next month =
-        previous closing balance.
+        <strong className="text-gold">How it works:</strong> Each month,
+        Interest = Opening Balance × (Annual Rate ÷ 1200). Principal Paid = Base
+        EMI before GST − Interest. GST (18%) is charged on the monthly interest
+        component, so the statement debit is Base EMI + GST. Opening balance for
+        next month = previous closing balance.
         {isNoCost ? (
           <>
             <br />
-            <strong className="text-green">
-              No Cost EMI:
-            </strong>{" "}
-            Your card is charged {formatCurrency(calc.principal)} (not{" "}
-            {formatCurrency(mrp)}). Merchant gives upfront discount of{" "}
-            {formatCurrency(calc.discount)}. Your base EMI = ₹{mrp} ÷ {tenure} ={" "}
-            {formatCurrency(calc.baseEMI)} exactly.
+            <strong className="text-green">No Cost EMI:</strong> Your card is
+            charged {formatCurrency(calc.principal)} (not {formatCurrency(mrp)}
+            ). Merchant gives upfront discount of{" "}
+            {formatCurrency(calc.discount)}. Your base EMI before GST is split
+            across {tenure} months and totals {formatCurrency(mrp)}.
           </>
         ) : null}
       </div>

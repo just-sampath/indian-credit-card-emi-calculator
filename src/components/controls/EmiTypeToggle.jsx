@@ -22,8 +22,8 @@ export function EmiTypeToggle({ isNoCost, onChange }) {
       </div>
       {isNoCost ? (
         <div className="mt-2 text-[10px] leading-normal text-text-muted">
-          Merchant absorbs interest as upfront discount. You pay MRP/N per
-          month, bank charges interest on discounted principal.
+          Merchant absorbs interest as upfront discount. Base EMIs total MRP;
+          statement debit also includes GST on interest.
         </div>
       ) : null}
     </div>

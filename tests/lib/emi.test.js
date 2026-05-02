@@ -5,6 +5,7 @@ import {
   calcPV,
   buildSchedule,
   calculateEmiScenario,
+  roundMoney,
 } from "../../src/lib/emi.js";
 
 describe("emi helpers", () => {
@@ -36,7 +37,7 @@ describe("emi helpers", () => {
     );
   });
 
-  it("matches the current regular-emi reference totals", () => {
+  it("includes GST on processing fee in regular-emi totals", () => {
     const result = calculateEmiScenario({
       mrp: 107705,
       annualRate: 17,
@@ -46,15 +47,79 @@ describe("emi helpers", () => {
       preclosureMonth: 3,
     });
 
-    expect(result.baseEMI).toBeCloseTo(18851.328157429398, 10);
-    expect(result.totalInterest).toBeCloseTo(5402.968944576394, 10);
-    expect(result.totalGST).toBeCloseTo(972.534410023751, 10);
-    expect(result.totalPaid).toBeCloseTo(114080.50335460015, 10);
-    expect(result.grandTotal).toBeCloseTo(114279.50335460015, 10);
-    expect(result.extraCostAboveMRP).toBeCloseTo(6574.5033546001505, 10);
+    expect(result.processingFee).toBe(199);
+    expect(result.processingFeeGst).toBe(35.82);
+    expect(result.processingFeeTotal).toBe(234.82);
+    expect(result.grandTotal).toBe(
+      roundMoney(result.totalPaid + result.processingFeeTotal)
+    );
+    expect(result.extraCostAboveMRP).toBe(
+      roundMoney(result.grandTotal - 107705)
+    );
   });
 
-  it("matches the current no-cost-emi reference totals", () => {
+  it("matches the standard no-cost-emi discount and GST example", () => {
+    const result = calculateEmiScenario({
+      mrp: 15000,
+      annualRate: 15,
+      tenure: 3,
+      isNoCost: true,
+      procFee: 0,
+      preclosureMonth: 1,
+    });
+
+    expect(result.principal).toBeCloseTo(14632.67, 2);
+    expect(result.discount).toBeCloseTo(367.33, 2);
+    expect(result.baseEMI).toBe(5000);
+    expect(result.totalInterest).toBeCloseTo(367.33, 2);
+    expect(result.totalGST).toBeCloseTo(66.12, 2);
+    expect(result.totalPaid).toBeCloseTo(15066.12, 2);
+  });
+
+  it("includes fee GST, accrued interest, interest GST, and clawback in preclosure", () => {
+    const result = calculateEmiScenario({
+      mrp: 107705,
+      annualRate: 17,
+      tenure: 6,
+      isNoCost: true,
+      procFee: 199,
+      preclosureMonth: 3,
+      preclosureInterestMonths: 1,
+      merchantClawback: 500,
+    });
+
+    expect(result.preclosure.month).toBe(3);
+    expect(result.preclosure.preclosureFee).toBe(
+      roundMoney(result.preclosure.outstandingPrincipal * PRECLOSURE_FEE)
+    );
+    expect(result.preclosure.preclosureFeeGst).toBe(
+      roundMoney(result.preclosure.preclosureFee * GST_RATE)
+    );
+    expect(result.preclosure.preclosureInterest).toBe(
+      roundMoney(result.preclosure.outstandingPrincipal * result.monthlyRate)
+    );
+    expect(result.preclosure.preclosureInterestGst).toBe(
+      roundMoney(result.preclosure.preclosureInterest * GST_RATE)
+    );
+    expect(result.preclosure.merchantClawback).toBe(500);
+    expect(result.preclosure.totalCost).toBe(
+      roundMoney(
+        result.preclosure.paidSoFar +
+          result.preclosure.outstandingPrincipal +
+          result.preclosure.preclosureFee +
+          result.preclosure.preclosureFeeGst +
+          result.preclosure.preclosureInterest +
+          result.preclosure.preclosureInterestGst +
+          result.processingFeeTotal +
+          result.preclosure.merchantClawback
+      )
+    );
+    expect(result.preclosure.savingVsFullTenure).toBe(
+      roundMoney(result.grandTotal - result.preclosure.totalCost)
+    );
+  });
+
+  it("rounds schedule rows to paise and closes the final principal balance", () => {
     const result = calculateEmiScenario({
       mrp: 107705,
       annualRate: 17,
@@ -64,15 +129,22 @@ describe("emi helpers", () => {
       preclosureMonth: 3,
     });
 
-    expect(result.principal).toBeCloseTo(102560.12138883195, 10);
-    expect(result.discount).toBeCloseTo(5144.878611168053, 10);
-    expect(result.baseEMI).toBeCloseTo(17950.833333333332, 10);
-    expect(result.totalInterest).toBeCloseTo(5144.878611168046, 10);
-    expect(result.totalGST).toBeCloseTo(926.0781500102481, 10);
-    expect(result.totalPaid).toBeCloseTo(108631.07815001023, 10);
-    expect(result.grandTotal).toBeCloseTo(108830.07815001023, 10);
-    expect(result.extraCostAboveMRP).toBeCloseTo(1125.0781500102312, 10);
-    expect(result.pcTotalCost).toBeCloseTo(108642.09349965073, 10);
-    expect(result.pcSavingVsFullTenure).toBeCloseTo(187.98465035950358, 10);
+    const isPaiseRounded = (value) =>
+      Number.isInteger(Math.round(value * 1000000) / 10000);
+
+    result.schedule.forEach((row) => {
+      expect(isPaiseRounded(row.openingBalance)).toBe(true);
+      expect(isPaiseRounded(row.interest)).toBe(true);
+      expect(isPaiseRounded(row.principalPaid)).toBe(true);
+      expect(isPaiseRounded(row.gst)).toBe(true);
+      expect(isPaiseRounded(row.baseEMI)).toBe(true);
+      expect(isPaiseRounded(row.totalPaid)).toBe(true);
+      expect(isPaiseRounded(row.closingBalance)).toBe(true);
+    });
+
+    expect(result.schedule.at(-1).closingBalance).toBe(0);
+    expect(
+      result.schedule.reduce((total, row) => total + row.baseEMI, 0)
+    ).toBeCloseTo(107705, 2);
   });
 });

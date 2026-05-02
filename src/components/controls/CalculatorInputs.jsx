@@ -97,8 +97,7 @@ export function CalculatorInputs({
           value={procFee}
         />
         <div className="mt-1 text-[10px] text-text-muted">
-          ₹199 – ₹849 + 18% GST (excluded from amortisation, shown in
-          summary)
+          Enter GST-exclusive fee; 18% GST is added in totals.
         </div>
       </div>
     </div>
