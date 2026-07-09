@@ -1,14 +1,15 @@
 import { cn, cva } from "../../lib/cn.js";
 
 const buttonVariants = cva(
-  "mono-font transition-all disabled:pointer-events-none disabled:opacity-60",
+  "mono-font transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-gold)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg)] disabled:pointer-events-none disabled:opacity-60",
   {
     variants: {
       variant: {
-        tab: "rounded-[4px] border border-transparent px-[18px] py-2 text-[12px] uppercase tracking-[0.1em]",
+        tab: "min-h-9 rounded-[4px] border border-transparent px-3 py-2 text-[11px] uppercase tracking-[0.1em] sm:px-[18px] sm:text-[12px]",
         toggle:
-          "rounded-[16px] border border-transparent px-4 py-1.5 text-[12px]",
-        tenure: "flex-1 rounded-[6px] border px-1 py-[7px] text-[12px]",
+          "min-h-9 rounded-[16px] border border-transparent px-3 py-1.5 text-[12px] sm:px-4",
+        tenure:
+          "min-h-9 min-w-[2.75rem] flex-1 rounded-[6px] border px-1 py-[7px] text-[12px]",
       },
       selected: {
         true: "",

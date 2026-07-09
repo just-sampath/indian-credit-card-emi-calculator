@@ -6,9 +6,13 @@ import { formatCurrency } from "../../lib/format.js";
 export function Sidebar({
   annualRate,
   calc,
+  dayCountConvention,
+  firstPeriodDays,
   isNoCost,
   mrp,
   onAnnualRateChange,
+  onDayCountConventionChange,
+  onFirstPeriodDaysChange,
   onIsNoCostChange,
   onMrpChange,
   onProcFeeChange,
@@ -22,8 +26,12 @@ export function Sidebar({
 
       <CalculatorInputs
         annualRate={annualRate}
+        dayCountConvention={dayCountConvention}
+        firstPeriodDays={firstPeriodDays}
         mrp={mrp}
         onAnnualRateChange={onAnnualRateChange}
+        onDayCountConventionChange={onDayCountConventionChange}
+        onFirstPeriodDaysChange={onFirstPeriodDaysChange}
         onMrpChange={onMrpChange}
         onProcFeeChange={onProcFeeChange}
         onTenureChange={onTenureChange}

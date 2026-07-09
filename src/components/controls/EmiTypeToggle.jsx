@@ -3,9 +3,16 @@ import { Button } from "../ui/Button.jsx";
 export function EmiTypeToggle({ isNoCost, onChange }) {
   return (
     <div>
-      <div className="section-label">EMI Type</div>
-      <div className="toggle-pill">
+      <div className="section-label" id="emi-type-label">
+        EMI Type
+      </div>
+      <div
+        aria-labelledby="emi-type-label"
+        className="toggle-pill"
+        role="group"
+      >
         <Button
+          aria-pressed={isNoCost}
           onClick={() => onChange(true)}
           selected={isNoCost}
           variant="toggle"
@@ -13,6 +20,7 @@ export function EmiTypeToggle({ isNoCost, onChange }) {
           No Cost EMI
         </Button>
         <Button
+          aria-pressed={!isNoCost}
           onClick={() => onChange(false)}
           selected={!isNoCost}
           variant="toggle"

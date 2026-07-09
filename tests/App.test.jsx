@@ -11,6 +11,25 @@ describe("App", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Product MRP (₹)")).toBeInTheDocument();
     expect(screen.getByText("PRINCIPAL AMORTIZED")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Inputs" })).toBeInTheDocument();
+  });
+
+  it("opens the mobile inputs drawer from the header", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Inputs" }));
+
+    expect(
+      screen.getByRole("dialog", { name: "Calculator inputs" })
+    ).toBeInTheDocument();
+    // Single control tree: MRP lives only in the drawer while it is open
+    expect(screen.getByLabelText("Product MRP (₹)")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+
+    expect(
+      screen.queryByRole("dialog", { name: "Calculator inputs" })
+    ).not.toBeInTheDocument();
   });
 
   it("switches from the schedule tab to the pre-closure tab", () => {
