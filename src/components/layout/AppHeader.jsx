@@ -1,37 +1,21 @@
-import { Badge } from "../ui/Badge.jsx";
-import { Button } from "../ui/Button.jsx";
-
-export function AppHeader({ inputsOpen, onInputsClick }) {
+export function AppHeader() {
   return (
-    <header className="shrink-0 border-b border-border bg-surface px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-6 sm:py-4">
-      <div className="flex items-start gap-3 sm:items-center">
-        <div className="mt-0.5 h-8 w-2 shrink-0 rounded-xs bg-gold sm:mt-0" />
-        <div className="min-w-0 flex-1">
-          <div className="display-font text-[16px] font-extrabold tracking-[0.02em] text-gold-soft sm:text-[18px]">
+    <header className="shrink-0 border-b border-border bg-surface px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 sm:px-6 sm:pb-4 shell:short:pt-2.5 shell:short:pb-2.5 3xl:px-7 [@media(max-height:500px)]:pb-2">
+      <div className="flex items-center gap-3">
+        <div
+          aria-hidden="true"
+          className="hidden h-10 w-1.5 shrink-0 rounded-xs bg-gold sm:block"
+        />
+        <div className="min-w-0">
+          <h1 className="display-font text-[15px] leading-tight font-extrabold text-gold-soft sm:text-[19px] sm:tracking-[0.01em]">
             Credit Card EMI Calculator
-          </div>
-          <div className="mt-0.5 hidden text-[11px] text-text-muted sm:block">
-            Reducing-balance · GST on interest · No Cost EMI · Pre-closure
-            analysis
-          </div>
-          <div className="mt-0.5 text-[10px] text-text-muted sm:hidden">
-            Reducing-balance · GST · No Cost EMI
-          </div>
-        </div>
-        <div className="ml-auto flex shrink-0 items-center gap-2">
-          <div className="hidden sm:block">
-            <Badge tone="gold">RBI Compliant</Badge>
-          </div>
-          <Button
-            aria-controls="inputs-drawer"
-            aria-expanded={inputsOpen}
-            className="lg:hidden"
-            onClick={onInputsClick}
-            selected
-            variant="tenure"
-          >
-            Inputs
-          </Button>
+          </h1>
+          <p className="mt-0.5 text-[12px] leading-snug text-text-muted [@media(max-height:500px)]:hidden">
+            The true cost of No Cost and regular EMIs
+            <span className="hidden sm:inline">
+              : interest, GST, fees and pre-closure
+            </span>
+          </p>
         </div>
       </div>
     </header>

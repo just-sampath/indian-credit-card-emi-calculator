@@ -4,6 +4,7 @@ import {
   DAY_COUNT_ACTUAL365,
   DAY_COUNT_THIRTY,
   calcEMI,
+  calcEffectiveAnnualRate,
   calcPV,
   calcPVFromPayments,
   calcPVFromPaymentsIrregular,
@@ -428,3 +429,74 @@ function sumGstFromSchedule(schedule) {
     schedule.reduce((a, row) => a + gstOnInterest(row.interest), 0)
   );
 }
+
+describe("effective annual cost", () => {
+  it("recovers the quoted rate for a plain annuity with no GST or fees", () => {
+    // Independent: ₹1,00,000 at 12% p.a. (1%/mo) over 12 months.
+    const emi = calcEMI(100000, 0.01, 12);
+    const cashflows = Array.from({ length: 12 }, (_, index) => ({
+      months: index + 1,
+      amount: emi,
+    }));
+    expect(calcEffectiveAnnualRate(100000, cashflows)).toBeCloseTo(12, 6);
+  });
+
+  it("is zero when you repay exactly what you received", () => {
+    const cashflows = [
+      { months: 1, amount: 500 },
+      { months: 2, amount: 500 },
+    ];
+    expect(calcEffectiveAnnualRate(1000, cashflows)).toBeCloseTo(0, 6);
+  });
+
+  it("returns null when there is nothing to solve", () => {
+    expect(calcEffectiveAnnualRate(0, [{ months: 1, amount: 10 }])).toBeNull();
+    expect(calcEffectiveAnnualRate(1000, [])).toBeNull();
+  });
+
+  it("prices GST and fees on top of the quoted rate", () => {
+    const shared = { mrp: 107705, annualRate: 17, tenure: 6, procFee: 199 };
+    const regular = calculateEmiScenario({ ...shared, isNoCost: false });
+    const noCost = calculateEmiScenario({ ...shared, isNoCost: true });
+    const regularNoFee = calculateEmiScenario({
+      ...shared,
+      procFee: 0,
+      isNoCost: false,
+    });
+
+    // GST on interest lifts the cost above the quoted 17%; fees lift it more.
+    expect(regularNoFee.effectiveAnnualRate).toBeGreaterThan(17);
+    expect(regular.effectiveAnnualRate).toBeGreaterThan(
+      regularNoFee.effectiveAnnualRate
+    );
+    // "No Cost" still costs something (GST + fee), but far less than regular.
+    expect(noCost.effectiveAnnualRate).toBeGreaterThan(0);
+    expect(noCost.effectiveAnnualRate).toBeLessThan(
+      regular.effectiveAnnualRate
+    );
+  });
+});
+
+describe("cost breakdown identity shown in the summary", () => {
+  it.each([true, false])(
+    "MRP + interest − discount + GST + fee = total (isNoCost=%s)",
+    (isNoCost) => {
+      const calc = calculateEmiScenario({
+        mrp: 107705,
+        annualRate: 17,
+        tenure: 9,
+        procFee: 199,
+        isNoCost,
+        firstPeriodDays: 41,
+      });
+      const shown = roundMoney(
+        107705 +
+          calc.totalInterest -
+          calc.discount +
+          calc.totalGST +
+          calc.processingFeeTotal
+      );
+      expect(shown).toBeCloseTo(calc.grandTotal, 2);
+    }
+  );
+});

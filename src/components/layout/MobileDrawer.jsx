@@ -55,7 +55,13 @@ function lockBodyScroll() {
   };
 }
 
-export function MobileDrawer({ open, onClose, title = "Inputs", children }) {
+export function MobileDrawer({
+  open,
+  onClose,
+  title = "Inputs",
+  summary = null,
+  children,
+}) {
   const titleId = useId();
   const panelRef = useRef(null);
   const previouslyFocused = useRef(null);
@@ -73,20 +79,10 @@ export function MobileDrawer({ open, onClose, title = "Inputs", children }) {
     previouslyFocused.current = document.activeElement;
     const unlockBody = lockBodyScroll();
 
-    // Initial focus once per open — never re-run on parent re-renders / onClose identity.
+    // Focus the dialog itself (announces its title) rather than a text field,
+    // which would pop the on-screen keyboard before the user picks a control.
     const focusTimer = window.setTimeout(() => {
-      const panel = panelRef.current;
-      if (!panel) {
-        return;
-      }
-      const body = panel.querySelector("[data-drawer-body]");
-      const preferred =
-        body?.querySelector(
-          'input:not([disabled]):not([type="hidden"]):not([type="range"])'
-        ) ?? getFocusable(body)[0];
-      const fallback = getFocusable(panel)[0];
-      const target = preferred instanceof HTMLElement ? preferred : fallback;
-      target?.focus();
+      panelRef.current?.focus();
     }, 0);
 
     function onKeyDown(event) {
@@ -109,7 +105,10 @@ export function MobileDrawer({ open, onClose, title = "Inputs", children }) {
       const firstNode = nodes[0];
       const lastNode = nodes[nodes.length - 1];
 
-      if (event.shiftKey && document.activeElement === firstNode) {
+      if (document.activeElement === panel) {
+        event.preventDefault();
+        (event.shiftKey ? lastNode : firstNode).focus();
+      } else if (event.shiftKey && document.activeElement === firstNode) {
         event.preventDefault();
         lastNode.focus();
       } else if (!event.shiftKey && document.activeElement === lastNode) {
@@ -146,26 +145,23 @@ export function MobileDrawer({ open, onClose, title = "Inputs", children }) {
         ref={panelRef}
         aria-labelledby={titleId}
         aria-modal="true"
-        className="drawer-panel absolute inset-y-0 right-0 flex w-full max-w-[400px] flex-col border-l border-border bg-surface-alt shadow-[-12px_0_40px_rgba(0,0,0,0.45)]"
+        className="drawer-panel absolute inset-y-0 right-0 flex w-full max-w-[420px] flex-col border-l border-border bg-surface-alt pr-[env(safe-area-inset-right)] shadow-[-12px_0_40px_rgba(0,0,0,0.45)] outline-none"
         id="inputs-drawer"
         role="dialog"
+        tabIndex={-1}
       >
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
-          <div
-            className="display-font text-[15px] font-bold tracking-[0.04em] text-gold-soft"
+          <h2
+            className="display-font text-[16px] font-bold tracking-[0.02em] text-gold-soft"
             id={titleId}
           >
             {title}
-          </div>
-          <Button
-            className="min-h-9 px-3 py-1.5 text-[11px] uppercase tracking-[0.1em]"
-            onClick={() => onCloseRef.current()}
-            selected
-            variant="tenure"
-          >
+          </h2>
+          <Button onClick={() => onCloseRef.current()} variant="primary">
             Done
           </Button>
         </div>
+        {summary}
         <div
           className="drawer-scroll flex flex-1 flex-col gap-5 overflow-y-auto overscroll-contain p-4 pb-[max(1.25rem,env(safe-area-inset-bottom))]"
           data-drawer-body

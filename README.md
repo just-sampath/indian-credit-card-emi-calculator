@@ -1,6 +1,6 @@
 # Indian Credit Card EMI Calculator
 
-React rebuild of the `reference.jsx` calculator with the same UI structure, copy, and calculation behavior, organized as a Vite project and configured for GitHub Pages deployment.
+A calculator for Indian credit card EMIs. For No Cost and regular EMIs it shows the monthly statement debit, interest, 18% GST, processing fees and pre-closure costs. It began as a React rebuild of `reference.jsx` and is set up as a Vite project that deploys to GitHub Pages.
 
 ## Stack
 

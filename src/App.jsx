@@ -1,20 +1,42 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppHeader } from "./components/layout/AppHeader.jsx";
 import { AppShell } from "./components/layout/AppShell.jsx";
-import { KeyMetricsBar } from "./components/layout/KeyMetricsBar.jsx";
+import { InputsSummaryBar } from "./components/layout/InputsSummaryBar.jsx";
 import { MobileDrawer } from "./components/layout/MobileDrawer.jsx";
+import {
+  LiveResultsStrip,
+  ResultsHero,
+} from "./components/layout/ResultsHero.jsx";
 import { Sidebar } from "./components/layout/Sidebar.jsx";
 import { PreclosureTab } from "./components/tabs/PreclosureTab.jsx";
 import { ScheduleTab } from "./components/tabs/ScheduleTab.jsx";
 import { SummaryTab } from "./components/tabs/SummaryTab.jsx";
-import {
-  DAY_COUNT_THIRTY,
-  DEFAULT_FIRST_PERIOD_DAYS,
-  calculateEmiScenario,
-} from "./lib/emi.js";
+import { calculateEmiScenario } from "./lib/emi.js";
+import { maxPreclosureMonth } from "./lib/inputLimits.js";
+import { parseState, serializeState } from "./lib/urlState.js";
 
-/** Tailwind `lg` — close mobile-only drawer so body scroll/focus lock cannot stick. */
-const DESKTOP_MEDIA = "(min-width: 1024px)";
+/** Same query as the `shell` CSS variant: the inputs column replaces the drawer. */
+const SHELL_MEDIA = "(min-width: 768px) and (min-height: 540px)";
+
+function isDesktop() {
+  return Boolean(window.matchMedia?.(SHELL_MEDIA).matches);
+}
+
+/** True when the current history entry is the one pushed for the drawer. */
+function onDrawerEntry() {
+  return window.history.state?.inputsDrawer === true;
+}
+
+function replaceQuery(query) {
+  if (window.location.search !== query) {
+    const { pathname, hash } = window.location;
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${pathname}${query}${hash}`
+    );
+  }
+}
 
 const TABS = [
   {
@@ -35,43 +57,124 @@ const TABS = [
 ];
 
 export default function App() {
-  const [mrp, setMrp] = useState(107705);
-  const [annualRate, setAnnualRate] = useState(17);
-  const [tenure, setTenure] = useState(6);
-  const [isNoCost, setIsNoCost] = useState(true);
-  const [procFee, setProcFee] = useState(199);
+  // The URL is the source of truth on load, so reloads, discarded tabs and
+  // shared links all reopen the same scenario.
+  const [initial] = useState(() => parseState(window.location.search));
+  const [mrp, setMrp] = useState(initial.mrp);
+  const [annualRate, setAnnualRate] = useState(initial.annualRate);
+  const [tenure, setTenure] = useState(initial.tenure);
+  const [isNoCost, setIsNoCost] = useState(initial.isNoCost);
+  const [procFee, setProcFee] = useState(initial.procFee);
   const [firstPeriodDays, setFirstPeriodDays] = useState(
-    DEFAULT_FIRST_PERIOD_DAYS
+    initial.firstPeriodDays
   );
-  const [dayCountConvention, setDayCountConvention] =
-    useState(DAY_COUNT_THIRTY);
-  const [preclosureMonth, setPreclosureMonth] = useState(3);
-  const [preclosureFeeRate, setPreclosureFeeRate] = useState(3);
-  const [preclosureInterestMonths, setPreclosureInterestMonths] = useState(1);
-  const [merchantClawback, setMerchantClawback] = useState(0);
-  const [activeTab, setActiveTab] = useState("schedule");
-  const [inputsOpen, setInputsOpen] = useState(false);
+  const [dayCountConvention, setDayCountConvention] = useState(
+    initial.dayCountConvention
+  );
+  const [preclosureMonth, setPreclosureMonth] = useState(
+    initial.preclosureMonth
+  );
+  const [preclosureFeeRate, setPreclosureFeeRate] = useState(
+    initial.preclosureFeeRate
+  );
+  const [preclosureInterestMonths, setPreclosureInterestMonths] = useState(
+    initial.preclosureInterestMonths
+  );
+  const [merchantClawback, setMerchantClawback] = useState(
+    initial.merchantClawback
+  );
+  const [activeTab, setActiveTab] = useState(initial.activeTab);
+  // Reopen the drawer if the page was reloaded while it was open.
+  const [inputsOpen, setInputsOpen] = useState(
+    () => onDrawerEntry() && !isDesktop()
+  );
 
-  const closeInputs = useCallback(() => setInputsOpen(false), []);
-  const toggleInputs = useCallback(
-    () => setInputsOpen((open) => !open),
-    []
-  );
+  // The drawer gets its own history entry so the phone's back gesture closes
+  // it instead of leaving the site. Closing in-app pops that entry again.
+  const openInputs = useCallback(() => {
+    if (!onDrawerEntry()) {
+      window.history.pushState(
+        { ...window.history.state, inputsDrawer: true },
+        ""
+      );
+    }
+    setInputsOpen(true);
+  }, []);
+
+  const closeInputs = useCallback(() => {
+    setInputsOpen(false);
+    if (onDrawerEntry()) {
+      window.history.back();
+    }
+  }, []);
+
+  // Latest query string, read by the popstate handler below.
+  const queryRef = useRef("");
+
+  useEffect(() => {
+    const syncWithHistory = () => {
+      setInputsOpen(onDrawerEntry() && !isDesktop());
+      // Going back lands on the entry from before the drawer opened, which
+      // still carries the old inputs in its URL.
+      replaceQuery(queryRef.current);
+    };
+    window.addEventListener("popstate", syncWithHistory);
+    return () => window.removeEventListener("popstate", syncWithHistory);
+  }, []);
+
+  // Keep dependent inputs inside their new bounds instead of showing "5 of 3".
+  const handleTenureChange = useCallback((nextTenure) => {
+    setTenure(nextTenure);
+    setPreclosureMonth((month) =>
+      Math.min(month, maxPreclosureMonth(nextTenure))
+    );
+  }, []);
+
+  const handleMrpChange = useCallback((nextMrp) => {
+    setMrp(nextMrp);
+    setMerchantClawback((clawback) => Math.min(clawback, nextMrp));
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) {
       return undefined;
     }
-    const media = window.matchMedia(DESKTOP_MEDIA);
+    const media = window.matchMedia(SHELL_MEDIA);
     const closeOnDesktop = () => {
       if (media.matches) {
-        setInputsOpen(false);
+        closeInputs();
       }
     };
     closeOnDesktop();
     media.addEventListener("change", closeOnDesktop);
     return () => media.removeEventListener("change", closeOnDesktop);
-  }, []);
+  }, [closeInputs]);
+
+  const effectivePreclosureMonth = Math.min(
+    Math.max(1, preclosureMonth),
+    maxPreclosureMonth(tenure)
+  );
+
+  const query = serializeState({
+    mrp,
+    annualRate,
+    tenure,
+    isNoCost,
+    procFee,
+    firstPeriodDays,
+    dayCountConvention,
+    preclosureMonth: effectivePreclosureMonth,
+    preclosureFeeRate,
+    preclosureInterestMonths,
+    merchantClawback,
+    activeTab,
+  });
+
+  // Mirror every change into the address bar without adding history entries.
+  useEffect(() => {
+    queryRef.current = query;
+    replaceQuery(query);
+  }, [query]);
 
   const calc = useMemo(
     () =>
@@ -81,7 +184,7 @@ export default function App() {
         tenure,
         isNoCost,
         procFee,
-        preclosureMonth,
+        preclosureMonth: effectivePreclosureMonth,
         preclosureFeeRate: preclosureFeeRate / 100,
         preclosureInterestMonths,
         merchantClawback,
@@ -91,13 +194,13 @@ export default function App() {
     [
       annualRate,
       dayCountConvention,
+      effectivePreclosureMonth,
       firstPeriodDays,
       isNoCost,
       merchantClawback,
       mrp,
       preclosureFeeRate,
       preclosureInterestMonths,
-      preclosureMonth,
       procFee,
       tenure,
     ]
@@ -107,7 +210,6 @@ export default function App() {
   const sidebar = (
     <Sidebar
       annualRate={annualRate}
-      calc={calc}
       dayCountConvention={dayCountConvention}
       firstPeriodDays={firstPeriodDays}
       isNoCost={isNoCost}
@@ -116,16 +218,21 @@ export default function App() {
       onDayCountConventionChange={setDayCountConvention}
       onFirstPeriodDaysChange={setFirstPeriodDays}
       onIsNoCostChange={setIsNoCost}
-      onMrpChange={setMrp}
+      onMrpChange={handleMrpChange}
       onProcFeeChange={setProcFee}
-      onTenureChange={setTenure}
+      onTenureChange={handleTenureChange}
       procFee={procFee}
       tenure={tenure}
     />
   );
 
   let content = (
-    <ScheduleTab calc={calc} isNoCost={isNoCost} mrp={mrp} tenure={tenure} />
+    <ScheduleTab
+      annualRate={annualRate}
+      calc={calc}
+      isNoCost={isNoCost}
+      mrp={mrp}
+    />
   );
 
   if (activeTab === "preclosure") {
@@ -134,13 +241,14 @@ export default function App() {
         calc={calc}
         isNoCost={isNoCost}
         merchantClawback={merchantClawback}
+        mrp={mrp}
         onMerchantClawbackChange={setMerchantClawback}
         onPreclosureFeeRateChange={setPreclosureFeeRate}
         onPreclosureInterestMonthsChange={setPreclosureInterestMonths}
         onPreclosureMonthChange={setPreclosureMonth}
-        preclosureMonth={preclosureMonth}
         preclosureFeeRate={preclosureFeeRate}
         preclosureInterestMonths={preclosureInterestMonths}
+        preclosureMonth={effectivePreclosureMonth}
         tenure={tenure}
       />
     );
@@ -162,28 +270,46 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-bg text-text">
+    <div className="min-h-dvh bg-bg text-text shell:flex shell:h-dvh shell:flex-col shell:overflow-hidden">
       <div
         aria-hidden={inputsOpen || undefined}
-        className="flex min-h-0 flex-1 flex-col overflow-hidden"
+        className="shell:flex shell:min-h-0 shell:flex-1 shell:flex-col shell:overflow-hidden"
         // Hide background from AT + pointer/keyboard while drawer is open
         inert={inputsOpen || undefined}
       >
-        <AppHeader inputsOpen={inputsOpen} onInputsClick={toggleInputs} />
+        <AppHeader />
         <AppShell
           activeTab={activeTab}
-          keyMetrics={<KeyMetricsBar calc={calc} isNoCost={isNoCost} />}
+          hero={
+            <ResultsHero
+              annualRate={annualRate}
+              calc={calc}
+              isNoCost={isNoCost}
+              mrp={mrp}
+              tenure={tenure}
+            />
+          }
           onTabChange={setActiveTab}
           sidebar={inputsOpen ? null : sidebar}
           tabs={TABS}
         >
           {content}
         </AppShell>
+        <InputsSummaryBar
+          annualRate={annualRate}
+          expanded={inputsOpen}
+          isNoCost={isNoCost}
+          mrp={mrp}
+          onEdit={openInputs}
+          procFee={procFee}
+          tenure={tenure}
+        />
       </div>
 
       <MobileDrawer
         open={inputsOpen}
         onClose={closeInputs}
+        summary={<LiveResultsStrip calc={calc} />}
         title="Calculator inputs"
       >
         {sidebar}

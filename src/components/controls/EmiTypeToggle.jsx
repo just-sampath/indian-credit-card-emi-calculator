@@ -1,39 +1,28 @@
-import { Button } from "../ui/Button.jsx";
+import { SegmentedToggle } from "./SegmentedToggle.jsx";
+
+const OPTIONS = [
+  { value: true, label: "No Cost EMI" },
+  { value: false, label: "Regular EMI" },
+];
 
 export function EmiTypeToggle({ isNoCost, onChange }) {
   return (
     <div>
       <div className="section-label" id="emi-type-label">
-        EMI Type
+        EMI type
       </div>
-      <div
-        aria-labelledby="emi-type-label"
-        className="toggle-pill"
-        role="group"
-      >
-        <Button
-          aria-pressed={isNoCost}
-          onClick={() => onChange(true)}
-          selected={isNoCost}
-          variant="toggle"
-        >
-          No Cost EMI
-        </Button>
-        <Button
-          aria-pressed={!isNoCost}
-          onClick={() => onChange(false)}
-          selected={!isNoCost}
-          variant="toggle"
-        >
-          Regular EMI
-        </Button>
-      </div>
-      {isNoCost ? (
-        <div className="mt-2 text-[10px] leading-normal text-text-muted">
-          Merchant absorbs interest as upfront discount. Base EMIs total MRP;
-          statement debit also includes GST on interest.
-        </div>
-      ) : null}
+      <SegmentedToggle
+        labelledBy="emi-type-label"
+        onChange={onChange}
+        options={OPTIONS}
+        value={isNoCost}
+      />
+      {/* Short laptop/tablet screens: the Schedule tab note says the same. */}
+      <p className="field-hint shell:short:hidden">
+        {isNoCost
+          ? "The merchant discounts the price by the interest, so your EMIs add up to the MRP. You still pay GST on that interest."
+          : "You borrow the full MRP and pay interest at the rate below, plus GST on that interest."}
+      </p>
     </div>
   );
 }

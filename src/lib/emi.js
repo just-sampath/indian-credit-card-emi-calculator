@@ -128,6 +128,48 @@ export function calcPVFromPaymentsIrregular(payments, firstPeriodRate, monthlyRa
 }
 
 /**
+ * Effective annual cost of a purchase paid over time, quoted the way banks
+ * quote card rates (monthly IRR × 12, in percent).
+ *
+ * Solves  Σ amount / (1 + r)^months  =  amountReceived  for the monthly rate r.
+ * Returns null when there is nothing to solve or the rate is off the charts.
+ *
+ * @param {number} amountReceived - value received today (the product MRP)
+ * @param {{months: number, amount: number}[]} cashflows - payments after today
+ */
+export function calcEffectiveAnnualRate(amountReceived, cashflows) {
+  if (!(amountReceived > 0) || cashflows.length === 0) {
+    return null;
+  }
+
+  const npv = (rate) =>
+    cashflows.reduce(
+      (total, cashflow) =>
+        total + cashflow.amount / Math.pow(1 + rate, cashflow.months),
+      0
+    ) - amountReceived;
+
+  let low = -0.99;
+  let high = 1;
+
+  if (npv(low) < 0 || npv(high) > 0) {
+    return null;
+  }
+
+  // NPV falls as the rate rises, so bisection converges on the single root.
+  for (let iteration = 0; iteration < 100; iteration += 1) {
+    const mid = (low + high) / 2;
+    if (npv(mid) > 0) {
+      low = mid;
+    } else {
+      high = mid;
+    }
+  }
+
+  return ((low + high) / 2) * 12 * 100;
+}
+
+/**
  * Billed interest for a period (rounded to paise).
  */
 export function calcPeriodInterest(openingBalance, rate) {
@@ -373,6 +415,16 @@ export function calculateEmiScenario({
   const totalPaid = sumMoney(schedule.map((row) => row.totalPaid));
   const grandTotal = roundMoney(totalPaid + processingFeeTotal);
   const extraCostAboveMRP = roundMoney(grandTotal - amount);
+  // Processing fee is billed on the first statement alongside EMI 1.
+  const firstPaymentMonths =
+    convention === DAY_COUNT_ACTUAL365 ? (days * 12) / 365 : days / 30;
+  const effectiveAnnualRate = calcEffectiveAnnualRate(
+    amount,
+    schedule.map((row, index) => ({
+      months: firstPaymentMonths + index,
+      amount: row.totalPaid + (index === 0 ? processingFeeTotal : 0),
+    }))
+  );
   const clampedPreclosureMonth = Math.min(
     Math.max(1, preclosureMonth),
     months
@@ -416,6 +468,7 @@ export function calculateEmiScenario({
     processingFeeTotal,
     grandTotal,
     extraCostAboveMRP,
+    effectiveAnnualRate,
     preclosureFeeRate,
     preclosureInterestMonths: Math.max(0, preclosureInterestMonths),
     preclosureRows,
